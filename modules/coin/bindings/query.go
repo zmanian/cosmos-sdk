@@ -6,18 +6,12 @@ import (
 	"github.com/tendermint/basecoin/client/commands"
 	"github.com/tendermint/basecoin/modules/coin"
 	"github.com/tendermint/basecoin/stack"
-	wire "github.com/tendermint/go-wire"
-	lc "github.com/tendermint/light-client"
-	"github.com/tendermint/light-client/certifiers"
-	"github.com/tendermint/light-client/certifiers/client"
-	"github.com/tendermint/light-client/proofs"
-	rpcclient "github.com/tendermint/tendermint/rpc/client"
 )
 
 // Coin is an exportable version of coin.Coin (no int64)
-type Coin struct {
-	Denom  string `json:"denom"`
-	Amount int    `json:"amount"`
+type MyCoin struct {
+	Denom  string
+	Amount int
 }
 
 // AccountResult captures all account info
@@ -37,22 +31,26 @@ func (a AccountResult) NumCoins() int {
 // Coin allows you to get a coin by index
 // together with NumCoins, it allows us to avoid exposing a slice to
 // the C ABI boundary
-func (a AccountResult) Coin(i int) Coin {
+func (a *AccountResult) MyCoin(i int) *MyCoin {
 	return convertCoin(a.account.Coins[i])
 }
 
-func convertCoin(c coin.Coin) Coin {
-	return Coin{
+func convertCoin(c coin.Coin) *MyCoin {
+	return &MyCoin{
 		Denom:  c.Denom,
 		Amount: int(c.Amount),
 	}
 }
 
+func GetCoin() *MyCoin {
+	return &MyCoin{"demo", 123}
+}
+
 // GetAccount provides a binding to call from C
-func GetAccount(hexAddr, url string) AccountResult {
+func GetAccount(hexAddr, url string) *AccountResult {
 	act, err := commands.ParseActor(hexAddr)
 	if err != nil {
-		return AccountResult{Error: err.Error()}
+		return &AccountResult{Error: err.Error()}
 	}
 	key := stack.PrefixedKey(coin.NameCoin, act.Bytes())
 
@@ -65,8 +63,8 @@ func GetAccount(hexAddr, url string) AccountResult {
 	//  return res
 }
 
-func getHardcodedResult(key []byte, url string) AccountResult {
-	return AccountResult{
+func getHardcodedResult(key []byte, url string) *AccountResult {
+	return &AccountResult{
 		Height: 50,
 		Key:    hex.EncodeToString(key),
 		account: coin.Account{
@@ -78,6 +76,7 @@ func getHardcodedResult(key []byte, url string) AccountResult {
 	}
 }
 
+/*
 func getAppProof(key []byte, url string) (acct AccountResult, err error) {
 	node := rpcclient.NewHTTP(url, "/websocket")
 	prover := proofs.NewAppProver(node)
@@ -105,7 +104,7 @@ func getAppProof(key []byte, url string) (acct AccountResult, err error) {
 		return
 	}
 
-	acct = AccountResult{
+	acct = &AccountResult{
 		Height:  int(proof.BlockHeight()),
 		Key:     hex.EncodeToString(key),
 		account: data,
@@ -163,3 +162,4 @@ func validateProof(proof lc.Proof, node *rpcclient.HTTP,
 	err = proof.Validate(check)
 	return err
 }
+*/
