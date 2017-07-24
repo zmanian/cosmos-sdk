@@ -7,6 +7,10 @@ import (
 	// proofcmd "github.com/tendermint/basecoin/client/commands/proofs"
 	"github.com/tendermint/basecoin/modules/coin"
 	"github.com/tendermint/basecoin/stack"
+  rpcclient "github.com/tendermint/tendermint/rpc/client"
+  "github.com/tendermint/light-client/proofs"
+  wire "github.com/tendermint/go-wire"
+  lc "github.com/tendermint/light-client"
 )
 
 type ExportCoin struct {
@@ -25,7 +29,7 @@ type AccountResult struct {
 	Error   string
 }
 
-/*
+
 func convertAccount(acct coin.Account) ExportAccount {
   return ExportAccount{
     Coins: convertCoins(acct.Coins),
@@ -42,34 +46,57 @@ func convertCoins(coins []coin.Coin) []ExportCoin {
   }
   return res
 }
-*/
-func GetAccount(hexAddr string) AccountResult {
+
+func GetAccount(hexAddr, url string) AccountResult {
 	act, err := commands.ParseActor(hexAddr)
 	if err != nil {
 		return AccountResult{Error: err.Error()}
 	}
 	key := stack.PrefixedKey(coin.NameCoin, act.Bytes())
 
-	return AccountResult{
-		Height: 50,
-		Key:    hex.EncodeToString(key),
-		Account: ExportAccount{
-			Coins: []ExportCoin{{
-				Denom:  "atom",
-				Amount: 420,
-			}},
-		},
-	}
+  return getHardcodedResult(key, url)
 
-	// acct := coin.Account{}
-	// proof, err := proofcmd.GetAndParseAppProof(key, &acct)
+ //  res, err := getAppProof(key, url)
 	// if err != nil {
 	//   return AccountResult{Error: err.Error()}
 	// }
+ //  return res
+}
 
-	// res := AccountResult{
-	//   Height: int(proof.BlockHeight()),
-	//   Account: convertAccount(acct),
-	// }
-	// return res
+func getHardcodedResult(key []byte, url string) AccountResult {
+  return AccountResult{
+    Height: 50,
+    Key:    hex.EncodeToString(key),
+    Account: ExportAccount{
+      Coins: []ExportCoin{{
+        Denom:  "atom",
+        Amount: 420,
+      }},
+    },
+  }
+}
+
+func getAppProof(key []byte, url string) (acct AccountResult, err error) {
+  node := rpcclient.NewHTTP(url, "/websocket")
+  prover := proofs.NewAppProver(node)
+
+  var proof lc.Proof
+  proof, err = prover.Get(key, 0)
+  if err != nil {
+    return
+  }
+
+  // TODO: get certifier... implement GetAndParseAppProof...
+
+  var data coin.Account
+  err = wire.ReadBinaryBytes(proof.Data(), &data)
+  if err != nil {
+    return
+  }
+
+  acct = AccountResult{
+    Height: int(proof.BlockHeight()),
+    Account: convertAccount(data),
+  }
+  return
 }
