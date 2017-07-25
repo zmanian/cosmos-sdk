@@ -1,3 +1,8 @@
+/*
+- all types need constructors, iOS can't directly instantiate them
+- functions cannot return value types and rather need to return pointers
+*/
+
 package bindings
 
 import (
@@ -7,6 +12,19 @@ import (
 	"github.com/tendermint/basecoin/modules/coin"
 	"github.com/tendermint/basecoin/stack"
 )
+
+type Client struct {
+	DirectoryPath string
+}
+
+func NewClient() *Client {
+	return &Client{}
+}
+
+func (c Client) Init() {
+	println("Do something with this directory")
+	println(c.DirectoryPath)
+}
 
 // Coin is an exportable version of coin.Coin (no int64)
 type MyCoin struct {

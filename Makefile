@@ -43,6 +43,9 @@ test_tutorial: docs/guide/shunit2
 		bash $$script ; \
 	done
 
+ios_bindings:
+	@gomobile bind --target=ios -o ~/projects/tendermint/basecoin-ios/Bindings.framework github.com/tendermint/basecoin/modules/coin/bindings
+
 tests/cli/shunit2:
 	@wget "https://raw.githubusercontent.com/kward/shunit2/master/source/2.1/src/shunit2" \
     	-q -O tests/cli/shunit2
