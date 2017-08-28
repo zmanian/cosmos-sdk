@@ -102,6 +102,28 @@ func (k *Keys) UpdateKey(w http.ResponseWriter, r *http.Request) {
 	common.WriteSuccess(w, &key)
 }
 
+func (k Keys) RecoverKey(w http.ResponseWriter, r *http.Request) {
+	rReq := new(RecoverKeyRequest)
+	if err := common.ParseRequestAndValidateJSON(r, rReq); err != nil {
+		common.WriteError(w, err)
+		return
+	}
+
+	query := mux.Vars(r)
+	name := query["name"]
+	if name != rReq.Name {
+		common.WriteError(w, errNonMatchingPathAndJSONKeyNames)
+		return
+	}
+
+	key, err := k.manager.Recover(rReq.Name, rReq.Passphrase, rReq.Seed)
+	if err != nil {
+		common.WriteError(w, err)
+		return
+	}
+	common.WriteSuccess(w, &key)
+}
+
 func (k *Keys) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	dReq := new(DeleteKeyRequest)
 	if err := common.ParseRequestAndValidateJSON(r, dReq); err != nil {
@@ -169,13 +191,15 @@ func RegisterPostTx(r *mux.Router) error {
 // POST:      /keys
 // GET:	      /keys
 // GET:	      /keys/{name}
-// POST, PUT: /keys/{name}
+// PUT:       /keys/{name}
+// POST:      /keys/{name}
 // DELETE:    /keys/{name}
 func (k *Keys) RegisterAllCRUD(r *mux.Router) error {
 	r.HandleFunc("/keys", k.GenerateKey).Methods("POST")
 	r.HandleFunc("/keys", k.ListKeys).Methods("GET")
 	r.HandleFunc("/keys/{name}", k.GetKey).Methods("GET")
-	r.HandleFunc("/keys/{name}", k.UpdateKey).Methods("POST", "PUT")
+	r.HandleFunc("/keys/{name}", k.UpdateKey).Methods("PUT")
+	r.HandleFunc("/keys/{name}", k.RecoverKey).Methods("POST")
 	r.HandleFunc("/keys/{name}", k.DeleteKey).Methods("DELETE")
 
 	return nil

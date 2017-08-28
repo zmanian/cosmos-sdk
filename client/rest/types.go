@@ -25,6 +25,14 @@ type UpdateKeyRequest struct {
 	NewPass string `json:"new_passphrase,omitempty" validate:"required,min=10"`
 }
 
+// RecoverKeyRequest is sent to import a key from a seed phrase
+type RecoverKeyRequest struct {
+	Name       string `json:"name" validate:"required,min=4,printascii"`
+	Passphrase string `json:"password" validate:"min=10"`
+	Seed       string `json:"seed" validate:"required,min=23"`
+	Algo       string `json:"algo"`
+}
+
 type SignRequest struct {
 	Name     string `json:"name,omitempty" validate:"required,min=3,printascii"`
 	Password string `json:"password,omitempty" validate:"required,min=10"`
@@ -48,5 +56,5 @@ type SendInput struct {
 
 	To     *sdk.Actor `json:"to"`
 	From   *sdk.Actor `json:"from"`
-	Amount coin.Coins      `json:"amount"`
+	Amount coin.Coins `json:"amount"`
 }
