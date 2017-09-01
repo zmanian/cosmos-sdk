@@ -253,3 +253,5 @@ testImports:
   subpackages:
   - assert
   - require
+- name: github.com/tyler-smith/go-bip39
+  version: 8e7a99b3e716f36d3b080a9a70f9eb45abe4edcc

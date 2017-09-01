@@ -7,8 +7,6 @@ import:
 - package: github.com/spf13/pflag
 - package: github.com/spf13/viper
 - package: github.com/tendermint/abci
-  version: develop
-  version:
   subpackages:
   - server
   - types
@@ -53,6 +51,7 @@ import:
   - events
   - log
   - logger
+- package: github.com/tyler-smith/go-bip39
 testImport:
 - package: github.com/stretchr/testify
   subpackages:
