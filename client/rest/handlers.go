@@ -7,9 +7,13 @@ import (
 	"github.com/pkg/errors"
 
 	sdk "github.com/cosmos/cosmos-sdk"
+	"github.com/tendermint/go-crypto"
 	keysutils "github.com/tendermint/go-crypto/cmd"
-	keys "github.com/tendermint/go-crypto/keys"
+	"github.com/tendermint/go-crypto/hd"
+	"github.com/tendermint/go-crypto/keys"
+	"github.com/tendermint/go-crypto/keys/cryptostore"
 	"github.com/tendermint/tmlibs/common"
+	"github.com/tyler-smith/go-bip39"
 )
 
 type Keys struct {
@@ -147,6 +151,46 @@ func (k *Keys) DeleteKey(w http.ResponseWriter, r *http.Request) {
 	common.WriteSuccess(w, resp)
 }
 
+func (k *Keys) DeriveHD(w http.ResponseWriter, r *http.Request) {
+	dr := new(DeriveHDRequest)
+	if err := common.ParseRequestAndValidateJSON(r, dr); err != nil {
+		common.WriteError(w, err)
+		return
+	}
+
+	seed := bip39.NewSeed(dr.Seed, "")
+
+	_, secretHex, chainHex, _ := hd.ComputeMastersFromSeed(string(seed))
+
+	keyBytes := hd.DerivePrivateKeyForPath(
+		hd.HexDecode(secretHex),
+		hd.HexDecode(chainHex),
+		dr.Path,
+	)
+	// prepend type byte so the key can be unmarshalled by go-crypto
+	// (HD keys follow the Bitcoin spec, so they are always secp256k1)
+	keyBytes = append([]byte{crypto.TypeSecp256k1}, keyBytes...)
+	key, err := crypto.PrivKeyFromBytes(keyBytes)
+	if err != nil {
+		common.WriteError(w, err)
+		return
+	}
+
+	// store in key manager
+	cs, ok := k.manager.(cryptostore.Manager)
+	if !ok {
+		common.WriteError(w, errors.New("Invalid key manager"))
+		return
+	}
+	err = cs.Import(dr.Name, dr.Password, "", keyBytes)
+	if err != nil {
+		common.WriteError(w, err)
+		return
+	}
+
+	common.WriteSuccess(w, &key)
+}
+
 func doPostTx(w http.ResponseWriter, r *http.Request) {
 	tx := new(sdk.Tx)
 	if err := common.ParseRequestAndValidateJSON(r, tx); err != nil {
@@ -201,6 +245,7 @@ func (k *Keys) RegisterAllCRUD(r *mux.Router) error {
 	r.HandleFunc("/keys/{name}", k.UpdateKey).Methods("PUT")
 	r.HandleFunc("/keys/{name}", k.RecoverKey).Methods("POST")
 	r.HandleFunc("/keys/{name}", k.DeleteKey).Methods("DELETE")
+	r.HandleFunc("/hdkeys", k.DeriveHD).Methods("POST", "PUT")
 
 	return nil
 }

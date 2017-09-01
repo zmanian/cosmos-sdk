@@ -40,6 +40,13 @@ type SignRequest struct {
 	Tx sdk.Tx `json:"tx" validate:"required"`
 }
 
+type DeriveHDRequest struct {
+	Name     string `json:"name,omitempty" validate:"required,min=3,printascii"`
+	Password string `json:"password,omitempty" validate:"required,min=10"`
+	Seed     string `json:"seed,omitempty" validate:"required,min=23,printascii"`
+	Path     string `json:"path,omitempty" validate:"required,min=1,printascii"`
+}
+
 type CreateKeyResponse struct {
 	Key  keys.Info `json:"key,omitempty"`
 	Seed string    `json:"seed_phrase,omitempty"`
