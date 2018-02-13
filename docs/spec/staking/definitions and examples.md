@@ -108,7 +108,41 @@ worth more as share-to-atom-ex-rate is now worth 50/45 Atoms per share. Therefor
 
 `delegatorCoins = 10 (delegator shares) * 1 (delegator-share-to-global-share-ex-rate) * 50/45 (share-to-atom-ex-rate) = 100/9 Atoms`  
    
+### Inflation provisions
 
+Validator provisions are minted on an hourly basis (the first block of a new
+hour).  The annual target of between 7% and 20%. The long-term target ratio of
+bonded tokens to unbonded tokens is 67%.  
+    
+The target annual inflation rate is recalculated for each previsions cycle. The
+inflation is also subject to a rate change (positive of negative) depending or
+the distance from the desired ratio (67%). The maximum rate change possible is
+defined to be 13% per year, however the annual inflation is capped as between
+7% and 20%.
+    
+```
+inflationRateChange(0) = 0
+GlobalState.Inflation(0) = 0.07
+    
+bondedRatio = GlobalState.BondedPool / GlobalState.TotalSupply
+AnnualInflationRateChange = (1 - bondedRatio / 0.67) * 0.13
+
+annualInflation += AnnualInflationRateChange
+
+if annualInflation > 0.20 then GlobalState.Inflation = 0.20
+if annualInflation < 0.07 then GlobalState.Inflation = 0.07
+
+provisionTokensHourly = GlobalState.TotalSupply * GlobalState.Inflation / (365.25*24)
+```
+
+Because the validators hold a relative bonded share (`GlobalStakeShares`), when
+more bonded tokens are added proportionally to all validators, the only term
+which needs to be updated is the `GlobalState.BondedPool`. So for each previsions
+cycle:
+
+```
+GlobalState.BondedPool += provisionTokensHourly
+```
 
 
 

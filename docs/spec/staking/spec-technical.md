@@ -42,7 +42,8 @@ GlobalState data structure contains total Atoms supply, amount of Atoms in the b
 distributed for the bonded pool, amount of Atoms in the unbonded pool, sum of all shares distributed for the 
 unbonded pool, a timestamp of the last processing of inflation, the current annual inflation rate, a timestamp 
 for the last comission accounting reset, the global fee pool, a pool of reserve taxes collected for the governance use
-and an adjustment factor for calculating global feel accum (?).    
+and an adjustment factor for calculating global fee accum. `Params` is global data structure that stores system 
+parameters and defines overall functioning of the module.    
   
 ``` golang
 type GlobalState struct {
@@ -57,6 +58,27 @@ type GlobalState struct {
     FeePool                  coin.Coins   // fee pool for all the fee shares which have already been distributed
     ReservePool              coin.Coins   // pool of reserve taxes collected on all fees for governance use
     Adjustment               rational.Rat // Adjustment factor for calculating global fee accum
+}
+
+type Params struct {
+	HoldBonded   Address // account  where all bonded coins are held
+	HoldUnbonded Address // account where all delegated but unbonded coins are held
+
+	InflationRateChange rational.Rational // maximum annual change in inflation rate
+	InflationMax        rational.Rational // maximum inflation rate
+	InflationMin        rational.Rational // minimum inflation rate
+	GoalBonded          rational.Rational // Goal of percent bonded atoms
+	ReserveTax          rational.Rational // Tax collected on all fees
+
+	MaxVals          uint16  // maximum number of validators
+	AllowedBondDenom string  // bondable coin denomination
+
+	// gas costs for txs
+	GasDeclareCandidacy int64 
+	GasEditCandidacy    int64 
+	GasDelegate         int64 
+	GasRedelegate       int64 
+	GasUnbond           int64 
 }
 ```
 
@@ -84,10 +106,7 @@ type Candidate struct {
     Description            Description 
 }
 ```
-
-CandidateStatus can be VyingUnbonded, VyingUnbonding, Bonded, KickUnbonding and KickUnbonded.
-
-
+ 
 ``` golang
 type Description struct {
 	Name       string 
@@ -99,11 +118,8 @@ type Description struct {
 ```
 
 Candidate parameters are described:
- - Status: signal that the candidate is either vying for validator status,
-   either unbonded or unbonding, an active validator, or a kicked validator
-   either unbonding or unbonded.
- - PubKey: separated key from the owner of the candidate as is used strictly
-   for participating in consensus.
+ - Status: it can be Bonded (active validator), Unbonded (validator candidate) or Revoked
+ - PubKey: candidate public key that is used strictly for participating in consensus
  - Owner: Address where coins are bonded from and unbonded to 
  - GlobalStakeShares: Represents shares of `GlobalState.BondedPool` if
    `Candidate.Status` is `Bonded`; or shares of `GlobalState.UnbondedPool` otherwise
@@ -113,7 +129,7 @@ Candidate parameters are described:
  - RedelegatingShares: The portion of `IssuedDelegatorShares` which are
    currently re-delegating to a new validator
  - VotingPower: Proportional to the amount of bonded tokens which the validator
-   has if the candidate is a validator.
+   has if `Candidate.Status` is `Bonded`; otherwise it is equal to `0`
  - Commission:  The commission rate of fees charged to any delegators
  - CommissionMax:  The maximum commission rate this candidate can charge 
    each day from the date `GlobalState.DateLastCommissionReset` 
@@ -134,10 +150,9 @@ Candidate parameters are described:
 
 ### DelegatorBond
 
-Atom holders may delegate coins to validators; under this circumstance their
+Atom holders may delegate coins to candidates; under this circumstance their
 funds are held in a `DelegatorBond` data structure. It is owned by one delegator, and is
-associated with the shares for one validator. The sender of the transaction is
-considered the owner of the bond.  
+associated with the shares for one candidate. The sender of the transaction is the owner of the bond.  
 
 ``` golang
 type DelegatorBond struct {
@@ -154,76 +169,82 @@ Description:
  - AdjustmentFeePool: Adjustment factor used to passively calculate each bonds
    entitled fees from `GlobalState.FeePool`
  - AdjustmentRewardPool: Adjustment factor used to passively calculate each
-   bonds entitled fees from `Candidate.ProposerRewardPool``
+   bonds entitled fees from `Candidate.ProposerRewardPool`
+      
  
 ### QueueElem
 
 Unbonding and re-delegation process is implemented using the ordered queue data structure. 
-All queue elements used share a common structure:
+All queue elements share a common structure:
 
 ``` golang
 type QueueElem struct {
 	Candidate   crypto.PubKey
-	InitHeight  int64    // when the queue was initiated
+	InitTime    int64    // when the element was added to the queue
 }
 ```
 
-The queue is ordered so the next to unbond/re-delegate is at the head. Every
+The queue is ordered so the next element to unbond/re-delegate is at the head. Every
 tick the head of the queue is checked and if the unbonding period has passed
-since `InitHeight`, the final settlement of the unbonding is started or re-delegation is executed, and the element is
+since `InitTime`, the final settlement of the unbonding is started or re-delegation is executed, and the element is
 pop from the queue. Each `QueueElem` is persisted in the store until it is popped from the queue. 
 
 ### QueueElemUnbondDelegation
 
+QueueElemUnbondDelegation structure is used in the unbonding queue. 
+
 ``` golang
 type QueueElemUnbondDelegation struct {
 	QueueElem
-	Payout           Address  // account to pay out to
-    Shares           rational.Rat  // amount of delegator shares which are unbonding
-    StartSlashRatio  rational.Rat  // candidate slash ratio at start of re-delegation
+	Payout           Address       // account to pay out to
+    Tokens           coin.Coins    // the value in Atoms of the amount of delegator shares which are unbonding
+    StartSlashRatio  rational.Rat  // candidate slash ratio 
 }
 ``` 
-In the unbonding queue - the fraction of all historical slashings on
-that validator are recorded (`StartSlashRatio`). When this queue reaches maturity
-if that total slashing applied is greater on the validator then the
-difference (amount that should have been slashed from the first validator) is
-assigned to the amount being paid out.  
+
+TODO: Explain what is StartSlashRation.
 
 ### QueueElemReDelegate
+
+QueueElemReDelegate structure is used in the re-delegation queue. 
 
 ``` golang
 type QueueElemReDelegate struct {
 	QueueElem
-	Payout       Address  // account to pay out to
+	Payout       Address       // account to pay out to
     Shares       rational.Rat  // amount of shares which are unbonding
     NewCandidate crypto.PubKey // validator to bond to after unbond
 }
 ```
+Q: Why we need Payout address in the re-delegation element?
 
 ### Transaction Overview
 
 Available Transactions: 
  - TxDeclareCandidacy
- - TxEditCandidacy
- - TxLivelinessCheck
- - TxProveLive 
+ - TxEditCandidacy 
  - TxDelegate
  - TxUnbond 
  - TxRedelegate
+ - TxLivelinessCheck
+  - TxProveLive
 
 ## Transaction processing
 
 In this section we describe the processing of the transactions and the corresponding updates to the global state.
-For the following text we will use gs to refer to the GlobalState data structure, candidateMap is a reference to the 
-map[PubKey]Candidate, delegatorBonds is a reference to map[[]byte]DelegatorBond, unbondDelegationQueue is a 
-reference to the queue[QueueElemUnbondDelegation] and redelegationQueue is the reference for the 
-queue[QueueElemReDelegate]. We use tx to denote reference to a transaction that is being processed.      
+In the following text we will use `gs` to refer to the `GlobalState` data structure, 
+`unbondDelegationQueue` is a reference to the `queue[QueueElemUnbondDelegation]`, `reDelegationQueue` is the reference for the 
+`queue[QueueElemReDelegate]`. We use `tx` to denote a reference to a transaction that is being processed, and `sender` to
+denote the address of the sender of the transaction. We use function `loadCandidate(store, PubKey)` to obtain a Candidate 
+structure from the store, and `saveCandidate(store, candidate)` to save it. Similarly, we use 
+`loadDelegatorBond(store, sender, PubKey)` to load delegator bond with the key (sender and PubKey) from the store, and 
+ `saveDelegatorBond(store, sender, bond)` to save it. `removeDelegatorBond(store, sender, bond)` is used to remove the 
+ bond from the store. 
+     
  
 ### TxDeclareCandidacy
 
-A validator candidacy can be declared using the `TxDeclareCandidacy` transaction.
-During this transaction a self-delegation transaction is executed to bond
-tokens which are sent in with the transaction (TODO: What does this mean?).
+A validator candidacy is declared using the `TxDeclareCandidacy` transaction.
 
 ``` golang
 type TxDeclareCandidacy struct {
@@ -239,25 +260,23 @@ type TxDeclareCandidacy struct {
 
 ``` 
 declareCandidacy(tx TxDeclareCandidacy):
-    // create and save the empty candidate
     candidate = loadCandidate(store, tx.PubKey)
-    if candidate != nil then return 
+    if candidate != nil then return // candidate with that public key already exists 
    	
     candidate = NewCandidate(tx.PubKey)
     candidate.Status = Unbonded
     candidate.Owner = sender
-    init candidate VotingPower, GlobalStakeShares, IssuedDelegatorShares,RedelegatingShares and Adjustment to rational.Zero
+    init candidate VotingPower, GlobalStakeShares, IssuedDelegatorShares, RedelegatingShares and Adjustment to rational.Zero
     init commision related fields based on the values from tx
     candidate.ProposerRewardPool = Coin(0)  
     candidate.Description = tx.Description
    	
     saveCandidate(store, candidate)
    
-    // move coins from the sender account to a (self-bond) delegator account
-    // the candidate account and global shares are updated within here
-    txDelegate = TxDelegate{tx.BondUpdate}
-    return delegateWithCandidate(txDelegate, candidate)
+    txDelegate = TxDelegate(tx.PubKey, tx.Amount)
+    return delegateWithCandidate(txDelegate, candidate) 
 ``` 
+// see delegateWithCandidate function in [TxDelegate](TxDelegate)
 
 ### TxEditCandidacy
 
@@ -276,23 +295,21 @@ type TxEditCandidacy struct {
 ```
 editCandidacy(tx TxEditCandidacy):
     candidate = loadCandidate(store, tx.PubKey)
-    if candidate == nil or candidate.Status == Unbonded return 
+    if candidate == nil or candidate.Status == Revoked return 
+    
     if tx.GovernancePubKey != nil then candidate.GovernancePubKey = tx.GovernancePubKey
     if tx.Commission >= 0 then candidate.Commission = tx.Commission
     if tx.Description != nil then candidate.Description = tx.Description
+    
     saveCandidate(store, candidate)
     return
   ```
      	
 ### TxDelegate
 
-All bonding, whether self-bonding or delegation, is done via `TxDelegate`. 
-
 Delegator bonds are created using the `TxDelegate` transaction. Within this transaction the delegator provides 
 an amount of coins, and in return receives some amount of candidate's delegator shares that are assigned to 
-`DelegatorBond.Shares`. The amount of created delegator shares depends on the candidate's 
-delegator-shares-to-atoms exchange rate and is computed as
-`delegator-shares = delegator-coins / delegator-shares-to-atom-ex-rate`.
+`DelegatorBond.Shares`. 
 
 ``` golang 
 type TxDelegate struct { 
@@ -315,51 +332,48 @@ delegateWithCandidate(tx TxDelegate, candidate Candidate):
 	else 
 		poolAccount = address of the unbonded pool
 	
-	// Move coins from the delegator account to the bonded pool account
+	// Move coins from the delegator account to the bonded/unbonded pool account
 	err = transfer(sender, poolAccount, tx.Amount)
 	if err != nil then return 
 
 	// Get or create the delegator bond
 	bond = loadDelegatorBond(store, sender, tx.PubKey)
 	if bond == nil then 
-	    bond = DelegatorBond{tx.PubKey,rational.Zero, Coin(0), Coin(0)}
+	    bond = DelegatorBond(tx.PubKey, rational.Zero, Coin(0), Coin(0))
 	
-	issuedDelegatorShares = candidate.addTokens(tx.Amount, gs)
-	bond.Shares = bond.Shares.Add(issuedDelegatorShares)
+	issuedDelegatorShares = addTokens(tx.Amount, candidate)
+	bond.Shares += issuedDelegatorShares
 	
 	saveCandidate(store, candidate)
-	
-	store.Set(GetDelegatorBondKey(sender, bond.PubKey), bond)
-	
+	saveDelegatorBond(store, sender, bond)
 	saveGlobalState(store, gs)
 	return 
 
-addTokens(amount int64, gs GlobalState, candidate Candidate):
-
-	// get the exchange rate of global pool shares over delegator shares
+addTokens(amount coin.Coin, candidate Candidate):
+	if candidate.Status == Bonded then
+		gs.BondedPool += amount
+		issuedShares = amount / exchangeRate(gs.BondedShares, gs.BondedPool) 
+        gs.BondedShares += issuedShares
+	else 
+		gs.UnbondedPool += amount
+		issuedShares = amount / exchangeRate(gs.UnbondedShares, gs.UnbondedPool)
+        gs.UnbondedShares += issuedShares
+	
+	candidate.GlobalStakeShares += issuedShares
+    
+    // get the exchange rate of global pool shares over delegator shares
     if candidate.IssuedDelegatorShares.IsZero() then 
         exRate = rational.One
     else
-        exRate = candiate.GlobalStakeShares.Quo(candidate.IssuedDelegatorShares)
-    
-	if candidate.Status == Bonded then
-		gs.BondedPool += amount
-		issuedShares = exchangeRate(gs.BondedShares, gs.BondedPool).Inv().Mul(amount) // (tokens/shares)^-1 * tokens
-        gs.BondedShares = gs.BondedShares.Add(issuedShares)
-	else 
-		gs.UnbondedPool += amount
-		issuedShares = exchangeRate(gs.UnbondedShares, gs.UnbondedPool).Inv().Mul(amount) // (tokens/shares)^-1 * tokens
-        gs.UnbondedShares = gs.UnbondedShares.Add(issuedShares)
+        exRate = candidate.GlobalStakeShares / candidate.IssuedDelegatorShares
 	
-	candidate.GlobalStakeShares = candidate.GlobalStakeShares.Add(issuedShares)
-
-	issuedDelegatorShares = exRate.Mul(receivedGlobalShares)
-	candidate.IssuedDelegatorShares = candidate.IssuedDelegatorShares.Add(issuedDelegatorShares)
+	issuedDelegatorShares = issuedShares / exRate
+	candidate.IssuedDelegatorShares += issuedDelegatorShares
 	return
 	
 exchangeRate(shares rational.Rat, tokenAmount int64):
     if shares.IsZero() then return rational.One
-    return shares.Inv().Mul(tokenAmount)
+    return tokenAmount / shares
     	
 ```
 
@@ -375,111 +389,262 @@ type TxUnbond struct {
 
 ```
 unbond(tx TxUnbond):
-
-	// get delegator bond
 	bond = loadDelegatorBond(store, sender, tx.PubKey)
 	if bond == nil then return 
-
-	// subtract bond tokens from delegator bond
-	if bond.Shares.LT(tx.Shares) return // bond shares < tx shares
+	if bond.Shares < tx.Shares return 
 	
-	bond.Shares = bond.Shares.Sub(ts.Shares)
+	bond.Shares -= tx.Shares
 
 	candidate = loadCandidate(store, tx.PubKey)
-	if candidate == nil return
-
+	
 	revokeCandidacy = false
-	if bond.Shares.IsZero() {
-        // if the bond is the owner of the candidate then trigger a revoke candidacy
-		if sender.Equals(candidate.Owner) and candidate.Status != Revoked then
+	if bond.Shares.IsZero() then
+		if sender == candidate.Owner and candidate.Status != Revoked then
 			revokeCandidacy = true
-
-		// remove the bond
-		removeDelegatorBond(store, sender, tx.PubKey)
+		removeDelegatorBond(store, sender, bond)
 	else 
 	    saveDelegatorBond(store, sender, bond)
 
-	// transfer coins back to account
 	if candidate.Status == Bonded then
         poolAccount = address of the bonded pool
     else 
         poolAccount = address of the unbonded pool
 
-	returnCoins = candidate.removeShares(shares, gs)
-	// TODO: Shouldn't it be created a queue element in this case?
-	transfer(poolAccount, sender, returnCoins)
-
+	returnedCoins = removeShares(candidate, shares)
+	
+	unbondDelegationElem = QueueElemUnbondDelegation(tx.PubKey, currentHeight(), sender, returnedCoins, startSlashRatio)
+	// TODO: Add logic regarding startSlashRatio
+	unbondDelegationQueue.add(unbondDelegationElem)
+	
+	TODO: Figure out where we should move coins after they are unbonded as they should stay somewhere during UnbondingPeriod
+	transfer(poolAccount, unbondingPoolAddress, returnCoins)  
+    
 	if revokeCandidacy then
 	    // change the share types to unbonded if they were not already
-	if candidate.Status == Bonded then
-	    // replace bonded shares with unbonded shares
-        tokens = gs.removeSharesBonded(candidate.GlobalStakeShares)
-        candidate.GlobalStakeShares = gs.addTokensUnbonded(tokens)
-        candidate.Status = Unbonded
-        
-        transfer(address of the bonded pool, address of the unbonded pool, tokens)
-		// lastly update the status
+	    if candidate.Status == Bonded then
+	        bondedToUnbondedPool(candidate)
+		
 		candidate.Status = Revoked
 
 	// deduct shares from the candidate and save
-	if candidate.GlobalStakeShares.IsZero() then
+	if candidate.IssuedDelegatorShares.IsZero() then
 		removeCandidate(store, tx.PubKey)
 	else 
 		saveCandidate(store, candidate)
 
 	saveGlobalState(store, gs)
 	return 
+
+removeShares(candidate Candidate, shares rational.Rat):
+	globalPoolSharesToRemove = delegatorShareExRate(candidate) * shares
+
+	if candidate.Status == Bonded then
+		gs.BondedShares -= globalPoolSharesToRemove
+		removedTokens = exchangeRate(gs.BondedShares, gs.BondedPool) * globalPoolSharesToRemove 
+        gs.BondedPool -= removedTokens
+        returnedCoins = exchangeRate(gs.BondedShares, gs.BondedPool) * removedTokens
+	else 
+		gs.UnbondedShares -= globalPoolSharesToRemove
+		removedTokens = exchangeRate(gs.UnbondedShares, gs.UnbondedPool) * globalPoolSharesToRemove
+        gs.UnbondedPool -= removedTokens
+        returnedCoins = exchangeRate(gs.UnbondedShares, gs.UnbondedPool) * removedTokens
 	
-removeDelegatorBond(candidate Candidate):
+	candidate.GlobalStakeShares -= removedTokens
+	candidate.IssuedDelegatorShares -= shares
+	return returnedCoins
 
-	// first remove from the list of bonds
-	pks = loadDelegatorCandidates(store, sender)
-	for i, pk := range pks {
-		if candidate.Equals(pk) {
-			pks = append(pks[:i], pks[i+1:]...)
-		}
-	}
-	b := wire.BinaryBytes(pks)
-	store.Set(GetDelegatorBondsKey(delegator), b)
+delegatorShareExRate(candidate Candidate):
+	if candidate.IssuedDelegatorShares.IsZero() then
+		return rational.One
+	
+	return candidate.GlobalStakeShares / candidate.IssuedDelegatorShares
+	
+bondedToUnbondedPool(candidate Candidate):
 
-	// now remove the actual bond
-	store.Remove(GetDelegatorBondKey(delegator, candidate))
-	//updateDelegatorBonds(store, delegator)
-}	
-```
-
-### Inflation provisions
-
-Validator provisions are minted on an hourly basis (the first block of a new
-hour).  The annual target of between 7% and 20%. The long-term target ratio of
-bonded tokens to unbonded tokens is 67%.  
+	// replace bonded shares with unbonded shares
+	removedTokens = exchangeRate(gs.BondedShares, gs.BondedPool) * candidate.GlobalStakeShares 
+    gs.BondedShares -= candidate.GlobalStakeShares
+    gs.BondedPool -= removedTokens
+	
+	gs.UnbondedPool += removedTokens
+	issuedShares = removedTokens / exchangeRate(gs.UnbondedShares, gs.UnbondedPool)
+    gs.UnbondedShares += issuedShares
     
-The target annual inflation rate is recalculated for each previsions cycle. The
-inflation is also subject to a rate change (positive of negative) depending or
-the distance from the desired ratio (67%). The maximum rate change possible is
-defined to be 13% per year, however the annual inflation is capped as between
-7% and 20%.
+	candidate.GlobalStakeShares = issuedShares
+	candidate.Status = Unbonded
+
+	return transfer(address of the bonded pool, address of the unbonded pool, removedTokens)
+```
+
+### TxRedelegate
+
+The re-delegation command allows delegators to switch validators while still
+receiving equal reward to as if they had never unbonded.
+
+``` golang
+type TxRedelegate struct { 
+	PubKeyFrom crypto.PubKey
+	PubKeyTo   crypto.PubKey
+	Shares     rational.Rat 
+}
+```
+
+```
+redelegate(tx TxRedelegate):
+    bond = loadDelegatorBond(store, sender, tx.PubKey)
+    if bond == nil then return 
     
-```
-inflationRateChange(0) = 0
-GlobalState.Inflation(0) = 0.07
+    if bond.Shares < tx.Shares return 
+    //TODO: How we can enforce that the same bond can't be redelegated? Should we split the current bond into two so 
+    // we have a special bond for redelegation? 	
+    candidate = loadCandidate(store, tx.PubKeyFrom)
+    if candidate == nil return
     
-bondedRatio = GlobalState.BondedPool / GlobalState.TotalSupply
-AnnualInflationRateChange = (1 - bondedRatio / 0.67) * 0.13
-
-annualInflation += AnnualInflationRateChange
-
-if annualInflation > 0.20 then GlobalState.Inflation = 0.20
-if annualInflation < 0.07 then GlobalState.Inflation = 0.07
-
-provisionTokensHourly = GlobalState.TotalSupply * GlobalState.Inflation / (365.25*24)
+    candidate.RedelegatingShares += tx.Shares
+    reDelegationElem = QueueElemReDelegate(tx.PubKeyFrom, currentHeight(), sender, tx.Shares, tx.PubKeyTo)
+    redelegationQueue.add(reDelegationElem)
+    return     
 ```
 
-Because the validators hold a relative bonded share (`GlobalStakeShares`), when
-more bonded tokens are added proportionally to all validators, the only term
-which needs to be updated is the `GlobalState.BondedPool`. So for each previsions
-cycle:
+### TxLivelinessCheck
+
+Liveliness issues are calculated by keeping track of the block precommits in
+the block header. A queue is persisted which contains the block headers from
+all recent blocks for the duration of the unbonding period. A validator is
+defined as having livliness issues if they have not been included in more than
+33% of the blocks over: 
+ - The most recent 24 Hours if they have >= 20% of global stake
+ - The most recent week if they have = 0% of global stake
+ - Linear interpolation of the above two scenarios
+
+Liveliness kicks are only checked when a `TxLivelinessCheck` transaction is
+submitted. 
+
+``` golang
+type TxLivelinessCheck struct {
+    PubKey        crypto.PubKey
+    RewardAccount Addresss
+}
+```
+
+TODO: Add pseudo-code for handler logic!
+
+If the `TxLivelinessCheck` is successful in kicking a validator, 5% of the
+liveliness punishment is provided as a reward to `RewardAccount`.
+
+### TxProveLive
+
+If the validator was kicked for liveliness issues and is able to regain
+liveliness then all delegators in the temporary unbonding pool which have not
+transacted to move will be bonded back to the now-live validator and begin to
+once again collect provisions and rewards. Regaining liveliness is demonstrated
+by sending in a `TxProveLive` transaction:
+
+``` golang
+type TxProveLive struct {
+    PubKey crypto.PubKey
+}
+```
+
+TODO: Add pseudo-code for handler logic!
+
+### End of block handling
 
 ```
-GlobalState.BondedPool += provisionTokensHourly
+tick(ctx Context):
+    hrsPerYr = 8766   // as defined by a julian year of 365.25 days
+    
+    time = ctx.Time()
+    // Process Validator Provisions every hour 
+    if time > gs.InflationLastTime + ProvisionTimeout then
+        gs.InflationLastTime = time
+    	gs.Inflation = nextInflation(hrsPerYr).Round(1000000000)
+        
+        
+        provisions = gs.Inflation * (gs.TotalSupply / hrsPerYr)
+        
+        gs.BondedPool += provisions
+        gs.TotalSupply += provisions
+        
+        // save the params
+        saveGlobalState(store, gs)
+    
+   `unbondDelegationQueue` is a reference to the `queue[QueueElemUnbondDelegation]`, `reDelegationQueue`
+    
+    if time > unbondDelegationQueue.head().InitTime + UnbondingPeriod then 
+        for each element elem in the unbondDelegationQueue where time > elem.InitTime + UnbondingPeriod do
+    	    // TODO: implement logic that deals with slash ratio
+    	    transfer(unbondingQueueAddress, elem.Payout, elem.Tokens)
+    	    unbondDelegationQueue.remove(elem)
+    
+    if time > reDelegationQueue.head().InitTime + UnbondingPeriod then 
+        for each element elem in the unbondDelegationQueue where time > elem.InitTime + UnbondingPeriod do
+            candidate = getCandidate(store, elem.PubKey)
+            returnedCoins = removeShares(candidate, elem.Shares)
+            candidate.RedelegatingShares -= elem.Shares 
+            delegateWithCandidate(TxDelegate(elem.NewCandidate, returnedCoins), candidate)
+            reDelegationQueue.remove(elem)
+            
+    return UpdateValidatorSet()
+
+nextInflation(hrsPerYr rational.Rat):
+	if gs.TotalSupply > 0 then
+        bondedRatio = gs.BondedPool / gs.TotalSupply
+    else 
+        bondedRation = 0
+   
+	inflationRateChangePerYear = (1 - bondedRatio / params.GoalBonded) * params.InflationRateChange
+	inflationRateChange = inflationRateChangePerYear / hrsPerYr
+
+	inflation = gs.Inflation + inflationRateChange
+	if inflation > params.InflationMax then
+	    inflation = params.InflationMax
+	
+	if inflation < params.InflationMin then
+		inflation = params.InflationMin
+	
+	return inflation 
+
+UpdateValidatorSet():
+	candidates = loadCandidates(store)
+
+	v1 = candidates.Validators()
+	v2 = updateVotingPower(candidates).Validators()
+
+	change = v1.validatorsUpdated(v2) // determine all updated validators between two validator sets
+	return change
+
+updateVotingPower(candidates Candidates):
+	foreach candidate in candidates do
+	    candidate.VotingPower = (candidate.IssuedDelegatorShares - candidate.RedelegatingShares) * delegatorShareExRate(candidate)	
+	    
+	candidates.Sort()
+	
+	foreach candidate in candidates do
+	    if candidate is not in the first params.MaxVals do 
+	        candidate.VotingPower = rational.Zero
+		    if candidate.Status == Bonded then
+		        bondedToUnbondedPool(candidate Candidate)
+		
+		else if candidate.Status == UnBonded then
+            unbondedToBondedPool(candidate)
+                      
+		saveCandidate(store, c)
+	
+	return candidates
+
+unbondedToBondedPool(candidate Candidate):
+	removedTokens = exchangeRate(gs.UnbondedShares, gs.UnbondedPool) * candidate.GlobalStakeShares 
+    gs.UnbondedShares -= candidate.GlobalStakeShares
+    gs.UnbondedPool -= removedTokens
+	
+	gs.BondedPool += removedTokens
+	issuedShares = removedTokens / exchangeRate(gs.BondedShares, gs.BondedPool)
+    gs.BondedShares += issuedShares
+    
+	candidate.GlobalStakeShares = issuedShares
+	candidate.Status = Bonded
+
+	return transfer(address of the unbonded pool, address of the bonded pool, removedTokens)
+
 ```
