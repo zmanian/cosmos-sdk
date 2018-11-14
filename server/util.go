@@ -59,7 +59,14 @@ func PersistentPreRunEFn(context *Context) func(*cobra.Command, []string) error 
 		if err != nil {
 			return err
 		}
-		logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+
+		var logger log.Logger
+		if config.BaseConfig.StructuredLog {
+			logger = log.NewTMJSONLogger(log.NewSyncWriter(os.Stdout))
+		} else {
+			logger = log.NewTMLogger(log.NewSyncWriter(os.Stdout))
+		}
+
 		logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel())
 		if err != nil {
 			return err
