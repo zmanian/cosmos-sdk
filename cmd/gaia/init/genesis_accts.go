@@ -29,7 +29,8 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 		RunE: func(_ *cobra.Command, args []string) error {
 			config := ctx.Config
 			config.SetRoot(viper.GetString(cli.HomeFlag))
-			extractEthereum()
+			// extractEthereum()
+			extractBitcoin()
 			genFile := config.GenesisFile()
 			if !common.FileExists(genFile) {
 				return fmt.Errorf("%s does not exist, run `gaiad init` first", genFile)
@@ -70,6 +71,102 @@ type EthereumResponse struct {
 		TransactionHash  string   `json:"transactionHash"`
 		TransactionIndex string   `json:"transactionIndex"`
 	} `json:"result"`
+}
+
+type BlockInfoResponse struct {
+	Hash160       string `json:"hash160"`
+	Address       string `json:"address"`
+	NTx           int    `json:"n_tx"`
+	TotalReceived int64  `json:"total_received"`
+	TotalSent     int64  `json:"total_sent"`
+	FinalBalance  int64  `json:"final_balance"`
+	Txs           []struct {
+		Ver    int `json:"ver"`
+		Inputs []struct {
+			Sequence int64  `json:"sequence"`
+			Witness  string `json:"witness"`
+			PrevOut  struct {
+				Spent             bool `json:"spent"`
+				SpendingOutpoints []struct {
+					TxIndex int `json:"tx_index"`
+					N       int `json:"n"`
+				} `json:"spending_outpoints"`
+				TxIndex int    `json:"tx_index"`
+				Type    int    `json:"type"`
+				Addr    string `json:"addr"`
+				Value   int    `json:"value"`
+				N       int    `json:"n"`
+				Script  string `json:"script"`
+			} `json:"prev_out"`
+			Script string `json:"script"`
+		} `json:"inputs"`
+		Weight      int    `json:"weight"`
+		BlockHeight int    `json:"block_height"`
+		RelayedBy   string `json:"relayed_by"`
+		Out         []struct {
+			Spent             bool `json:"spent"`
+			SpendingOutpoints []struct {
+				TxIndex int `json:"tx_index"`
+				N       int `json:"n"`
+			} `json:"spending_outpoints,omitempty"`
+			TxIndex int    `json:"tx_index"`
+			Type    int    `json:"type"`
+			Addr    string `json:"addr,omitempty"`
+			Value   int    `json:"value"`
+			N       int    `json:"n"`
+			Script  string `json:"script"`
+		} `json:"out"`
+		LockTime   int    `json:"lock_time"`
+		Result     int    `json:"result"`
+		Size       int    `json:"size"`
+		BlockIndex int    `json:"block_index"`
+		Time       int    `json:"time"`
+		TxIndex    int    `json:"tx_index"`
+		VinSz      int    `json:"vin_sz"`
+		Hash       string `json:"hash"`
+		VoutSz     int    `json:"vout_sz"`
+		Rbf        bool   `json:"rbf,omitempty"`
+	} `json:"txs"`
+}
+
+// func extractBitcoin() (donors map[string]big.Int) {
+// 	btcclient, err := rpcclient.New(&rpcclient.ConnConfig{
+// 		HTTPPostMode: false,
+// 		DisableTLS:   false,
+// 		Host:         "rpc.blockchain.info",
+// 		User:         "1dc1a338-7b4e-45ee-bb3f-b7b4f5f7b064",
+// 		Pass:         "NtVbNz8d0UMHjNEfxqeD",
+// 	}, nil)
+// 	if err != nil {
+// 		panic("btc client error:" + err.Error())
+// 	}
+// 	txs, err := btcclient.ListTransactions("35ty8iaSbWsj4YVkoHzs9pZMze6dapeoZ8")
+
+// 	if err != nil {
+// 		panic("btc list transctions error:" + err.Error())
+// 	}
+// 	fmt.Println(txs)
+
+// 	return donors
+// }
+
+func extractBitcoin() (donors map[string]big.Int) {
+
+	resp, err := http.Get("https://blockchain.info/rawaddr/35ty8iaSbWsj4YVkoHzs9pZMze6dapeoZ8")
+
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	var parsed_resp BlockInfoResponse
+
+	json.NewDecoder(resp.Body).Decode(&parsed_resp)
+
+	for _, tx := range parsed_resp.Txs {
+
+	}
+
+	return donors
 }
 
 func extractEthereum() (donors map[string]big.Int) {
