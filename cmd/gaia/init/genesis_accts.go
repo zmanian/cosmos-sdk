@@ -2,11 +2,13 @@ package init
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 	"math/big"
 	"net/http"
+	"sort"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -29,8 +31,11 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 		RunE: func(_ *cobra.Command, args []string) error {
 			config := ctx.Config
 			config.SetRoot(viper.GetString(cli.HomeFlag))
-			// extractEthereum()
-			extractBitcoin()
+			doners := make(map[string]big.Int)
+
+			doners = extractEthereum(doners)
+			doners = extractBitcoin(doners)
+
 			genFile := config.GenesisFile()
 			if !common.FileExists(genFile) {
 				return fmt.Errorf("%s does not exist, run `gaiad init` first", genFile)
@@ -40,17 +45,38 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 				return err
 			}
 
-			var appState app.GenesisState
-			if err = cdc.UnmarshalJSON(genDoc.AppState, &appState); err != nil {
+			var appState *app.GenesisState
+			if err = cdc.UnmarshalJSON(genDoc.AppState, appState); err != nil {
 				return err
 			}
 
-			// appStateJSON, err := addGenesisAccount(cdc, appState, addr, coins)
-			// if err != nil {
-			// 	return err
-			// }
+			var keys []string
+			for k := range doners {
+				keys = append(keys, k)
+			}
 
-			return ExportGenesisFile(genFile, genDoc.ChainID, nil, genDoc.AppState)
+			sort.Strings(keys)
+
+			for _, account := range keys {
+				accountBytes, err := hex.DecodeString(account)
+				if err != nil {
+					log.Fatalln(err)
+				}
+				acc := sdk.AccAddress(accountBytes)
+				alloc := doners[account]
+				allocationCoin := sdk.Coin{
+					Denom:  "atom",
+					Amount: sdk.NewIntFromBigInt(&alloc),
+				}
+				appState, err = addGenesisAccount(cdc, appState, acc, sdk.Coins{allocationCoin})
+				if err != nil {
+					return err
+				}
+
+			}
+			appStateJSON, err := cdc.MarshalJSON(appState)
+
+			return ExportGenesisFile(genFile, genDoc.ChainID, nil, appStateJSON)
 		},
 	}
 	cmd.Flags().String(cli.HomeFlag, app.DefaultNodeHome, "node's home directory")
@@ -129,28 +155,7 @@ type BlockInfoResponse struct {
 	} `json:"txs"`
 }
 
-// func extractBitcoin() (donors map[string]big.Int) {
-// 	btcclient, err := rpcclient.New(&rpcclient.ConnConfig{
-// 		HTTPPostMode: false,
-// 		DisableTLS:   false,
-// 		Host:         "rpc.blockchain.info",
-// 		User:         "1dc1a338-7b4e-45ee-bb3f-b7b4f5f7b064",
-// 		Pass:         "NtVbNz8d0UMHjNEfxqeD",
-// 	}, nil)
-// 	if err != nil {
-// 		panic("btc client error:" + err.Error())
-// 	}
-// 	txs, err := btcclient.ListTransactions("35ty8iaSbWsj4YVkoHzs9pZMze6dapeoZ8")
-
-// 	if err != nil {
-// 		panic("btc list transctions error:" + err.Error())
-// 	}
-// 	fmt.Println(txs)
-
-// 	return donors
-// }
-
-func extractBitcoin() (donors map[string]big.Int) {
+func extractBitcoin(doners map[string]big.Int) map[string]big.Int {
 
 	resp, err := http.Get("https://blockchain.info/rawaddr/35ty8iaSbWsj4YVkoHzs9pZMze6dapeoZ8")
 
@@ -158,18 +163,36 @@ func extractBitcoin() (donors map[string]big.Int) {
 		log.Fatalln(err)
 	}
 
-	var parsed_resp BlockInfoResponse
+	var parsedResp BlockInfoResponse
 
-	json.NewDecoder(resp.Body).Decode(&parsed_resp)
+	json.NewDecoder(resp.Body).Decode(&parsedResp)
 
-	for _, tx := range parsed_resp.Txs {
+	for _, tx := range parsedResp.Txs {
+		//Ignore transctions not during the fundraiser
+		if tx.BlockHeight < 460654 || tx.BlockHeight > 460662 {
+			continue
+		}
+		if len(tx.Out) != 2 {
+			continue
+		}
+		if tx.Out[0].Script != "a9142e232a65af2f891ccbb16023683b8dbea8ebccef87" {
+			continue
+		}
+		tag := tx.Out[1].Script
+		if len(tag) != 44 || tag[:4] != "6a14" {
+			continue
+		}
+		balance := doners[tag[4:]]
+		donation := big.NewInt(int64(11635 * tx.Out[0].Value))
+
+		doners[tag[4:]] = *new(big.Int).Add(donation, &balance)
 
 	}
 
-	return donors
+	return doners
 }
 
-func extractEthereum() (donors map[string]big.Int) {
+func extractEthereum(doners map[string]big.Int) map[string]big.Int {
 
 	message := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -214,9 +237,9 @@ func extractEthereum() (donors map[string]big.Int) {
 		}
 		res := new(big.Int).Div(amount, rate)
 
-		donors[donor] = *res
+		doners[donor] = *res
 	}
-	return donors
+	return doners
 }
 
 // AddGenesisAccountCmd returns add-genesis-account cobra Command
@@ -248,12 +271,18 @@ func AddGenesisAccountCmd(ctx *server.Context, cdc *codec.Codec) *cobra.Command 
 				return err
 			}
 
-			var appState app.GenesisState
-			if err = cdc.UnmarshalJSON(genDoc.AppState, &appState); err != nil {
+			var appState *app.GenesisState
+			if err = cdc.UnmarshalJSON(genDoc.AppState, appState); err != nil {
 				return err
 			}
 
-			appStateJSON, err := addGenesisAccount(cdc, appState, addr, coins)
+			appState, err = addGenesisAccount(cdc, appState, addr, coins)
+			if err != nil {
+				return err
+			}
+
+			appStateJSON, err := cdc.MarshalJSON(appState)
+
 			if err != nil {
 				return err
 			}
@@ -266,7 +295,7 @@ func AddGenesisAccountCmd(ctx *server.Context, cdc *codec.Codec) *cobra.Command 
 	return cmd
 }
 
-func addGenesisAccount(cdc *codec.Codec, appState app.GenesisState, addr sdk.AccAddress, coins sdk.Coins) (json.RawMessage, error) {
+func addGenesisAccount(cdc *codec.Codec, appState *app.GenesisState, addr sdk.AccAddress, coins sdk.Coins) (*app.GenesisState, error) {
 	for _, stateAcc := range appState.Accounts {
 		if stateAcc.Address.Equals(addr) {
 			return nil, fmt.Errorf("the application state already contains account %v", addr)
@@ -276,5 +305,5 @@ func addGenesisAccount(cdc *codec.Codec, appState app.GenesisState, addr sdk.Acc
 	acc := auth.NewBaseAccountWithAddress(addr)
 	acc.Coins = coins
 	appState.Accounts = append(appState.Accounts, app.NewGenesisAccount(&acc))
-	return cdc.MarshalJSON(appState)
+	return appState, nil
 }
