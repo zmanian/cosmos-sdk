@@ -81,6 +81,11 @@
   name = "google.golang.org/genproto"
   revision = "383e8b2c3b9e36c4076b235b32537292176bae20"
 
+[[override]]
+name = "github.com/btcsuite/btcd"
+source = "github.com/zmanian/btcd"
+branch = "zaki/WatchOnlyListTransactions"
+
 [prune]
   go-tests = true
   unused-packages = true

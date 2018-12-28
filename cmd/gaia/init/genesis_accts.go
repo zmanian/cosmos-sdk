@@ -20,6 +20,9 @@ import (
 	"github.com/cosmos/cosmos-sdk/server"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/auth"
+
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/rpcclient"
 )
 
 // AddGenesisAccountsForFundraiserContributors
@@ -31,10 +34,10 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 		RunE: func(_ *cobra.Command, args []string) error {
 			config := ctx.Config
 			config.SetRoot(viper.GetString(cli.HomeFlag))
-			doners := make(map[string]big.Int)
+			donors := make(map[string]big.Int)
 
-			doners = extractEthereum(doners)
-			doners = extractBitcoin(doners)
+			//extractEthereum(donors)
+			extractBitcoin(donors)
 
 			genFile := config.GenesisFile()
 			if !common.FileExists(genFile) {
@@ -45,15 +48,19 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 				return err
 			}
 
-			var appState *app.GenesisState
+			appState := new(app.GenesisState)
+
 			if err = cdc.UnmarshalJSON(genDoc.AppState, appState); err != nil {
 				return err
 			}
 
 			var keys []string
-			for k := range doners {
+			sum_alloc := new(big.Int)
+			for k, alloc := range donors {
 				keys = append(keys, k)
+				sum_alloc = new(big.Int).Add(sum_alloc, &alloc)
 			}
+			fmt.Printf("Total allocation: %s", sum_alloc.String())
 
 			sort.Strings(keys)
 
@@ -63,7 +70,7 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 					log.Fatalln(err)
 				}
 				acc := sdk.AccAddress(accountBytes)
-				alloc := doners[account]
+				alloc := donors[account]
 				allocationCoin := sdk.Coin{
 					Denom:  "atom",
 					Amount: sdk.NewIntFromBigInt(&alloc),
@@ -155,44 +162,97 @@ type BlockInfoResponse struct {
 	} `json:"txs"`
 }
 
-func extractBitcoin(doners map[string]big.Int) map[string]big.Int {
+func extractBitcoin(donors map[string]big.Int) map[string]big.Int {
 
-	resp, err := http.Get("https://blockchain.info/rawaddr/35ty8iaSbWsj4YVkoHzs9pZMze6dapeoZ8")
-
-	if err != nil {
-		log.Fatalln(err)
+	connCfg := &rpcclient.ConnConfig{
+		Host:         "localhost:8332",
+		User:         "user",
+		Pass:         "password",
+		HTTPPostMode: true, // Bitcoin core only supports HTTP POST mode
+		DisableTLS:   true, // Bitcoin core does not provide TLS by default
 	}
 
-	var parsedResp BlockInfoResponse
+	client, err := rpcclient.New(connCfg, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer client.Shutdown()
 
-	json.NewDecoder(resp.Body).Decode(&parsedResp)
+	blockCount, err := client.GetBlockCount()
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Printf("Block count: %d", blockCount)
 
-	for _, tx := range parsedResp.Txs {
+	txs, err := client.ListTransactionsCountFromWatchOnly("*", 1000, 0)
+
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(txs)
+
+	heightLookup := make(map[string]int32)
+
+	for _, tx := range txs {
+		// if tx.Category != "recieve" {
+		// 	continue
+		// }
+		txid, err := chainhash.NewHashFromStr(tx.TxID)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		raw, err := client.GetRawTransactionVerbose(txid)
+
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		_, lookup := heightLookup[raw.BlockHash]
+		if !lookup {
+
+			blockhash, err := chainhash.NewHashFromStr(raw.BlockHash)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			headerOfBlock, err := client.GetBlockHeaderVerbose(blockhash)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			heightLookup[raw.BlockHash] = headerOfBlock.Height
+		}
+		height := heightLookup[raw.BlockHash]
+
 		//Ignore transctions not during the fundraiser
-		if tx.BlockHeight < 460654 || tx.BlockHeight > 460662 {
+		if height < 460654 || height > 460661 {
 			continue
 		}
-		if len(tx.Out) != 2 {
+		if len(raw.Vout) != 2 {
 			continue
 		}
-		if tx.Out[0].Script != "a9142e232a65af2f891ccbb16023683b8dbea8ebccef87" {
+		if raw.Vout[0].ScriptPubKey.Hex != "a9142e232a65af2f891ccbb16023683b8dbea8ebccef87" {
 			continue
 		}
-		tag := tx.Out[1].Script
+		tag := raw.Vout[1].ScriptPubKey.Hex
 		if len(tag) != 44 || tag[:4] != "6a14" {
 			continue
 		}
-		balance := doners[tag[4:]]
-		donation := big.NewInt(int64(11635 * tx.Out[0].Value))
+		balance := donors[tag[4:]]
+		donation := big.NewInt(int64(11635 * raw.Vout[0].Value))
 
-		doners[tag[4:]] = *new(big.Int).Add(donation, &balance)
+		fmt.Println(donation.String())
+
+		donors[tag[4:]] = *new(big.Int).Add(donation, &balance)
 
 	}
 
-	return doners
+	return donors
 }
 
-func extractEthereum(doners map[string]big.Int) map[string]big.Int {
+func extractEthereum(donors map[string]big.Int) map[string]big.Int {
 
 	message := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -225,21 +285,18 @@ func extractEthereum(doners map[string]big.Int) map[string]big.Int {
 		txdata := tx.Data
 		donor := tx.Topics[1][26:]
 		amount := new(big.Int)
-		_, err = fmt.Sscanf(txdata[66:130], "%x", amount)
-		if err != nil {
-			panic("parsing amount:" + err.Error())
-		}
+		amount.SetString(txdata[66:130], 16)
 
 		rate := new(big.Int)
-		_, err = fmt.Sscanf(txdata[130:], "%x", rate)
-		if err != nil {
-			panic("parsing rate" + err.Error())
-		}
+		rate.SetString(txdata[130:], 16)
+
 		res := new(big.Int).Div(amount, rate)
 
-		doners[donor] = *res
+		balance := donors[donor]
+
+		donors[donor] = *new(big.Int).Add(res, &balance)
 	}
-	return doners
+	return donors
 }
 
 // AddGenesisAccountCmd returns add-genesis-account cobra Command
@@ -271,7 +328,8 @@ func AddGenesisAccountCmd(ctx *server.Context, cdc *codec.Codec) *cobra.Command 
 				return err
 			}
 
-			var appState *app.GenesisState
+			appState := new(app.GenesisState)
+
 			if err = cdc.UnmarshalJSON(genDoc.AppState, appState); err != nil {
 				return err
 			}
