@@ -8,6 +8,7 @@ import (
 	"log"
 	"math/big"
 	"net/http"
+	"net/url"
 	"sort"
 
 	"github.com/spf13/cobra"
@@ -25,7 +26,15 @@ import (
 	"github.com/btcsuite/btcd/rpcclient"
 )
 
-// AddGenesisAccountsForFundraiserContributors
+const (
+	ethereumNodeURLFlag = "ethereum-node-url"
+	bitcoinNodeURLFlag  = "bitcoin-node-url"
+	bitcoinNodeUser     = "btc-rpc-user"
+	bitcoinNodePass     = "btc-rpc-pass"
+)
+
+//AddContributorAccounts generates an account in genesesis for each contributor to the Cosmos fundraiser on April 6th 2017
+//by querying data from the Bitcoin and Ethereum blockchains.
 func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "fundraiser",
@@ -36,8 +45,13 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 			config.SetRoot(viper.GetString(cli.HomeFlag))
 			donors := make(map[string]big.Int)
 
-			//extractEthereum(donors)
-			extractBitcoin(donors)
+			extractEthereum(viper.GetString(ethereumNodeURLFlag), donors)
+
+			btcUrl, err := url.Parse(viper.GetString(bitcoinNodeURLFlag))
+			if err != nil {
+				return err
+			}
+			extractBitcoin(btcUrl.Host, viper.GetString(bitcoinNodeUser), viper.GetString(bitcoinNodePass), donors)
 
 			genFile := config.GenesisFile()
 			if !common.FileExists(genFile) {
@@ -55,12 +69,9 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 			}
 
 			var keys []string
-			sum_alloc := new(big.Int)
-			for k, alloc := range donors {
+			for k := range donors {
 				keys = append(keys, k)
-				sum_alloc = new(big.Int).Add(sum_alloc, &alloc)
 			}
-			fmt.Printf("Total allocation: %s", sum_alloc.String())
 
 			sort.Strings(keys)
 
@@ -86,6 +97,11 @@ func AddContributorAccounts(ctx *server.Context, cdc *codec.Codec) *cobra.Comman
 			return ExportGenesisFile(genFile, genDoc.ChainID, nil, appStateJSON)
 		},
 	}
+
+	cmd.Flags().String(bitcoinNodeURLFlag, "http://localhost:8332", "rpc port of a synched bitcoin full node with a watch only wallet on the address")
+	cmd.Flags().String(ethereumNodeURLFlag, "https://mainnet.infura.io/v3/1fa0be52251e4a1c9871ee9c854502d7", "rpc port of an Ethereum full node")
+	cmd.Flags().String(bitcoinNodeUser, "user", "bitcoin rpc username")
+	cmd.Flags().String(bitcoinNodePass, "password", "bitcoin rpc password")
 	cmd.Flags().String(cli.HomeFlag, app.DefaultNodeHome, "node's home directory")
 	return cmd
 }
@@ -162,12 +178,12 @@ type BlockInfoResponse struct {
 	} `json:"txs"`
 }
 
-func extractBitcoin(donors map[string]big.Int) map[string]big.Int {
+func extractBitcoin(btc_host_port string, btc_user string, btc_pass string, donors map[string]big.Int) map[string]big.Int {
 
 	connCfg := &rpcclient.ConnConfig{
-		Host:         "localhost:8332",
-		User:         "user",
-		Pass:         "password",
+		Host:         btc_host_port,
+		User:         btc_user,
+		Pass:         btc_pass,
 		HTTPPostMode: true, // Bitcoin core only supports HTTP POST mode
 		DisableTLS:   true, // Bitcoin core does not provide TLS by default
 	}
@@ -178,25 +194,18 @@ func extractBitcoin(donors map[string]big.Int) map[string]big.Int {
 	}
 	defer client.Shutdown()
 
-	blockCount, err := client.GetBlockCount()
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("Block count: %d", blockCount)
-
 	txs, err := client.ListTransactionsCountFromWatchOnly("*", 1000, 0)
 
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(txs)
 
 	heightLookup := make(map[string]int32)
 
 	for _, tx := range txs {
-		// if tx.Category != "recieve" {
-		// 	continue
-		// }
+		if tx.Category != "receive" {
+			continue
+		}
 		txid, err := chainhash.NewHashFromStr(tx.TxID)
 
 		if err != nil {
@@ -243,8 +252,6 @@ func extractBitcoin(donors map[string]big.Int) map[string]big.Int {
 		balance := donors[tag[4:]]
 		donation := big.NewInt(int64(11635 * raw.Vout[0].Value))
 
-		fmt.Println(donation.String())
-
 		donors[tag[4:]] = *new(big.Int).Add(donation, &balance)
 
 	}
@@ -252,7 +259,7 @@ func extractBitcoin(donors map[string]big.Int) map[string]big.Int {
 	return donors
 }
 
-func extractEthereum(donors map[string]big.Int) map[string]big.Int {
+func extractEthereum(eth_url string, donors map[string]big.Int) map[string]big.Int {
 
 	message := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -272,16 +279,16 @@ func extractEthereum(donors map[string]big.Int) map[string]big.Int {
 		log.Fatalln(err)
 	}
 
-	resp, err := http.Post("https://mainnet.infura.io/v3/1fa0be52251e4a1c9871ee9c854502d7", "application/json", bytes.NewBuffer(bytesRepresentation))
+	resp, err := http.Post(eth_url, "application/json", bytes.NewBuffer(bytesRepresentation))
 	if err != nil {
 		log.Fatalln(err)
 	}
 
-	var parsed_resp EthereumResponse
+	var parsedResp EthereumResponse
 
-	json.NewDecoder(resp.Body).Decode(&parsed_resp)
+	json.NewDecoder(resp.Body).Decode(&parsedResp)
 
-	for _, tx := range parsed_resp.Result {
+	for _, tx := range parsedResp.Result {
 		txdata := tx.Data
 		donor := tx.Topics[1][26:]
 		amount := new(big.Int)

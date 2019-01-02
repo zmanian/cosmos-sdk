@@ -39,7 +39,7 @@ func TestAddGenesisAccount(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := addGenesisAccount(cdc, tt.args.appState, tt.args.addr, tt.args.coins)
+			_, err := addGenesisAccount(cdc, &tt.args.appState, tt.args.addr, tt.args.coins)
 			require.Equal(t, tt.wantErr, (err != nil))
 		})
 	}

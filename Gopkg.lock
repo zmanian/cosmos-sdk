@@ -43,7 +43,7 @@
 
 [[projects]]
   branch = "zaki/WatchOnlyListTransactions"
-  digest = "1:b51bfea653655773efef5018313f1abca195ce2058cc7e16ca82366a7906c350"
+  digest = "1:aedb3cdb9021331118d81f9055dc20c97f093a58c728f276a938706c2b17c7c9"
   name = "github.com/btcsuite/btcd"
   packages = [
     "btcec",
@@ -66,7 +66,7 @@
   revision = "84c8d2346e9fc8c7b947e243b9c24e6df9fd206a"
 
 [[projects]]
-  digest = "1:f466a3b25797cc69dfbaff05741cb60e217a776a24ccfb2952af6cce53ac3809"
+  digest = "1:d0a31b77988b04afbfa2c5ee38567a7a35d5a95de2266a644a7bc8d5c898e68d"
   name = "github.com/btcsuite/btcutil"
   packages = [
     ".",
@@ -116,7 +116,7 @@
   version = "v1.4.7"
 
 [[projects]]
-  digest = "1:fa30c0652956e159cdb97dcb2ef8b8db63ed668c02a5c3a40961c8f0641252fe"
+  digest = "1:fdf5169073fb0ad6dc12a70c249145e30f4058647bea25f0abd48b6d9f228a11"
   name = "github.com/go-kit/kit"
   packages = [
     "log",
@@ -148,7 +148,7 @@
   version = "v1.8.0"
 
 [[projects]]
-  digest = "1:212285efb97b9ec2e20550d81f0446cb7897e57cbdfd7301b1363ab113d8be45"
+  digest = "1:35621fe20f140f05a0c4ef662c26c0ab4ee50bca78aa30fe87d33120bd28165e"
   name = "github.com/gogo/protobuf"
   packages = [
     "gogoproto",
@@ -163,7 +163,7 @@
   version = "v1.1.1"
 
 [[projects]]
-  digest = "1:cb22af0ed7c72d495d8be1106233ee553898950f15fd3f5404406d44c2e86888"
+  digest = "1:17fe264ee908afc795734e8c4e63db2accabaf57326dbf21763a7d6b86096260"
   name = "github.com/golang/protobuf"
   packages = [
     "proto",
@@ -209,7 +209,7 @@
   version = "v1.4.0"
 
 [[projects]]
-  digest = "1:0c6aceca32885ed17808af2ad3a85f2cf18aca1a49b25de4a1d54f03913128c0"
+  digest = "1:c0d19ab64b32ce9fe5cf4ddceba78d5bc9807f0016db6b1183599da3dcc24d10"
   name = "github.com/hashicorp/hcl"
   packages = [
     ".",
@@ -284,7 +284,7 @@
   version = "v1.1.2"
 
 [[projects]]
-  digest = "1:d15b2fd801f2341f1bf31293085717ab203572baa271e8b495e6a0a5a2bea316"
+  digest = "1:6d4d9067e639d96a804ee9a30fa89c7233c5c5edbfe736072ff00d48c97bccc4"
   name = "github.com/otiai10/copy"
   packages = ["."]
   pruneopts = "UT"
@@ -315,7 +315,7 @@
   version = "v1.0.0"
 
 [[projects]]
-  digest = "1:32c1cb4c09d4eb89294d52c2df910ad981aa8d47f06fee22f0112702cf5f4e53"
+  digest = "1:93a746f1060a8acbcf69344862b2ceced80f854170e1caae089b2834c5fbf7f4"
   name = "github.com/prometheus/client_golang"
   packages = [
     "prometheus",
@@ -328,7 +328,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:0f37e09b3e92aaeda5991581311f8dbf38944b36a3edec61cc2d1991f527554a"
+  digest = "1:2d5cd61daa5565187e1d96bae64dbbc6080dacf741448e9629c64fd93203b0d4"
   name = "github.com/prometheus/client_model"
   packages = ["go"]
   pruneopts = "UT"
@@ -336,7 +336,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:7fceb50b560fede33fe9f87e29721d350d1a092909e813e26686c1ca5d7fe5c3"
+  digest = "1:db712fde5d12d6cdbdf14b777f0c230f4ff5ab0be8e35b239fc319953ed577a4"
   name = "github.com/prometheus/common"
   packages = [
     "expfmt",
@@ -348,7 +348,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:63f209d7f053d0a418b5dc3b35f6778a1dc725307e8f2068de592bef1c056a41"
+  digest = "1:d39e7c7677b161c2dd4c635a2ac196460608c7d8ba5337cc8cae5825a2681f8f"
   name = "github.com/prometheus/procfs"
   packages = [
     ".",
@@ -383,7 +383,7 @@
   version = "v1.6.0"
 
 [[projects]]
-  digest = "1:7f665ff60a4c8efd5a5c053bf862020cf9f7cd56c3f70dd140f45cd66fb08a8d"
+  digest = "1:6a4a11ba764a56d2758899ec6f3848d24698d48442ebce85ee7a3f63284526cd"
   name = "github.com/spf13/afero"
   packages = [
     ".",
@@ -402,7 +402,7 @@
   version = "v1.3.0"
 
 [[projects]]
-  digest = "1:872fa275c31e1f9db31d66fa9b1d4a7bb9a080ff184e6977da01f36bfbe07f11"
+  digest = "1:645cabccbb4fa8aab25a956cbcbdf6a6845ca736b2c64e197ca7cbb9d210b939"
   name = "github.com/spf13/cobra"
   packages = ["."]
   pruneopts = "UT"
@@ -434,7 +434,7 @@
   version = "v1.0.3"
 
 [[projects]]
-  digest = "1:73697231b93fb74a73ebd8384b68b9a60c57ea6b13c56d2425414566a72c8e6d"
+  digest = "1:7e8d267900c7fa7f35129a2a37596e38ed0f11ca746d6d9ba727980ee138f9f6"
   name = "github.com/stretchr/testify"
   packages = [
     "assert",
@@ -445,7 +445,7 @@
   version = "v1.2.1"
 
 [[projects]]
-  digest = "1:922191411ad8f61bcd8018ac127589bb489712c1d1a0ab2497aca4b16de417d2"
+  digest = "1:b3cfb8d82b1601a846417c3f31c03a7961862cb2c98dcf0959c473843e6d9a2b"
   name = "github.com/syndtr/goleveldb"
   packages = [
     "leveldb",
@@ -465,7 +465,7 @@
   revision = "c4c61651e9e37fa117f53c5a906d3b63090d8445"
 
 [[projects]]
-  digest = "1:34a30b75b54e4b73090d0cafc7884950f020272e36813201ba3860822c46c6dd"
+  digest = "1:605b6546f3f43745695298ec2d342d3e952b6d91cdf9f349bea9315f677d759f"
   name = "github.com/tendermint/btcd"
   packages = ["btcec"]
   pruneopts = "UT"
@@ -488,7 +488,7 @@
   version = "v0.12.0"
 
 [[projects]]
-  digest = "1:488045c95e30f5a5b49c21c580ea8ae13858e9cb6edb0d8420086d5653b40af4"
+  digest = "1:f94f468c7cd1fc3693ebc16011f26ec26538761cdcd182b3a28faa649a7d55e2"
   name = "github.com/tendermint/tendermint"
   packages = [
     "abci/client",
@@ -564,7 +564,7 @@
   version = "v0.9.2"
 
 [[projects]]
-  digest = "1:42636ef49cf4e750cc76c141372ef36be2f4e04b3154f3bf129c549f2898beaf"
+  digest = "1:6f6dc6060c4e9ba73cf28aa88f12a69a030d3d19d518ef8e931879eaa099628d"
   name = "golang.org/x/crypto"
   packages = [
     "bcrypt",
@@ -590,7 +590,7 @@
   source = "https://github.com/tendermint/crypto"
 
 [[projects]]
-  digest = "1:04dda8391c3e2397daf254ac68003f30141c069b228d06baec8324a5f81dc1e9"
+  digest = "1:d36f55a999540d29b6ea3c2ea29d71c76b1d9853fdcd3e5c5cb4836f2ba118f1"
   name = "golang.org/x/net"
   packages = [
     "context",
@@ -606,7 +606,7 @@
   revision = "292b43bbf7cb8d35ddf40f8d5100ef3837cced3f"
 
 [[projects]]
-  digest = "1:1b9d0e0ed6a27439ded0a6cb25f8d46fb649910c6e1b3d2160eb54ee4d1249ab"
+  digest = "1:4bd75b1a219bc590b05c976bbebf47f4e993314ebb5c7cbf2efe05a09a184d54"
   name = "golang.org/x/sys"
   packages = [
     "cpu",
@@ -616,7 +616,7 @@
   revision = "4e1fef5609515ec7a2cee7b5de30ba6d9b438cbf"
 
 [[projects]]
-  digest = "1:7509ba4347d1f8de6ae9be8818b0cd1abc3deeffe28aeaf4be6d4b6b5178d9ca"
+  digest = "1:a2ab62866c75542dd18d2b069fec854577a20211d7c0ea6ae746072a1dccdd18"
   name = "golang.org/x/text"
   packages = [
     "collate",
@@ -646,7 +646,7 @@
   revision = "383e8b2c3b9e36c4076b235b32537292176bae20"
 
 [[projects]]
-  digest = "1:851ba93ee00a247214f894bb3e85bb00d260a4e536e15539b2b2831a0405162f"
+  digest = "1:9edd250a3c46675d0679d87540b30c9ed253b19bd1fd1af08f4f5fb3c79fc487"
   name = "google.golang.org/grpc"
   packages = [
     ".",
