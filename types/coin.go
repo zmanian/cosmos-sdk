@@ -277,6 +277,20 @@ func (coins Coins) IsAllGTE(coinsB Coins) bool {
 	return diff.IsNotNegative()
 }
 
+func (coins Coins) IsAnyGTE(coinsB Coins) bool {
+	diff, _ := coins.SafeMinus(coinsB)
+	if len(diff) == 0 {
+		return false
+	}
+
+	for _, coin := range coins {
+		if coin.IsNotNegative() {
+			return true
+		}
+	}
+	return false
+}
+
 // IsAllLT returns True iff for every denom in coins, the denom is present at
 // a smaller amount in coinsB.
 func (coins Coins) IsAllLT(coinsB Coins) bool {
