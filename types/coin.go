@@ -283,7 +283,7 @@ func (coins Coins) IsAnyGTE(coinsB Coins) bool {
 		return false
 	}
 
-	for _, coin := range coins {
+	for _, coin := range diff {
 		if coin.IsNotNegative() {
 			return true
 		}
