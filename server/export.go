@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	flagHeight        = "height"
-	flagForZeroHeight = "for-zero-height"
+	flagHeight             = "height"
+	flagForZeroHeight      = "for-zero-height"
+	flagValidatorWhitelist = "whitelist"
 )
 
 // ExportCmd dumps app state to JSON.
@@ -54,7 +55,8 @@ func ExportCmd(ctx *Context, cdc *codec.Codec, appExporter AppExporter) *cobra.C
 			}
 			height := viper.GetInt64(flagHeight)
 			forZeroHeight := viper.GetBool(flagForZeroHeight)
-			appState, validators, err := appExporter(ctx.Logger, db, traceWriter, height, forZeroHeight)
+			validatorWhiteList := viper.GetStringSlice(flagValidatorWhitelist)
+			appState, validators, err := appExporter(ctx.Logger, db, traceWriter, height, forZeroHeight, validatorWhiteList)
 			if err != nil {
 				return errors.Errorf("error exporting state: %v\n", err)
 			}
@@ -71,13 +73,14 @@ func ExportCmd(ctx *Context, cdc *codec.Codec, appExporter AppExporter) *cobra.C
 			if err != nil {
 				return err
 			}
-
+			
 			fmt.Println(string(encoded))
 			return nil
 		},
 	}
 	cmd.Flags().Int64(flagHeight, -1, "Export state from a particular height (-1 means latest height)")
 	cmd.Flags().Bool(flagForZeroHeight, false, "Export state to start at height zero (perform preproccessing)")
+	cmd.Flags().StringSlice(flagValidatorWhitelist, []string{}, "Jail all validators except for the white list on export for zero height")
 	return cmd
 }
 
