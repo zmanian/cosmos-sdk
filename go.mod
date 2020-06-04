@@ -35,5 +35,6 @@ require (
 )
 
 replace github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.2-alpha.regen.1
+replace github.com/tendermint/iavl => github.com/zmanian/iavl v0.13.4-alpha-zaki
 
 go 1.14
