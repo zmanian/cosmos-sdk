@@ -32,8 +32,6 @@ func Test_serializeBlock(t *testing.T) {
 	}
 	res, _ := legacy.Cdc.MarshalJSON(resultBlock)
 	fmt.Println(string(res))
-	t.Fail()
-
 }
 
 func randVoteSet(
