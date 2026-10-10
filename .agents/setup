@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Install the repository's pinned Go toolchain for fresh orbs.
+version="$(awk '$1 == "go" { print $2; exit }' go.mod)"
+arch="$(uname -m)"
+case "$arch" in
+  x86_64) arch=amd64 ;;
+  aarch64) arch=arm64 ;;
+  *) echo "Unsupported architecture: $arch" >&2; exit 1 ;;
+esac
+target="/opt/go-$version"
+if [[ ! -x "$target/bin/go" ]]; then
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' EXIT
+  archive="go$version.linux-$arch.tar.gz"
+  checksum="$(curl -fsSL 'https://go.dev/dl/?mode=json&include=all' |
+    jq -er --arg archive "$archive" '.[] | .files[] | select(.filename == $archive) | .sha256')"
+  curl -fsSL "https://go.dev/dl/$archive" -o "$tmp/$archive"
+  echo "$checksum  $tmp/$archive" | sha256sum -c -
+  tar -xzf "$tmp/$archive" -C "$tmp"
+  sudo mv "$tmp/go" "$target"
+fi
+sudo ln -sfn "$target/bin/go" /usr/local/bin/go
+sudo ln -sfn "$target/bin/gofmt" /usr/local/bin/gofmt
+go version
